@@ -1,14 +1,14 @@
 #include <SPI.h>
 
 // Editable variables
-int scan_amount = 40;                    // Number of readings to average for distance measurement
-String file_path = "/scan_001.txt";      // Path to save the file
-int z_axis_height = 7;                  // Maximum height of the scanned file in cm.
-int step_delay = 3000;                   // Delay for each step of the stepper motor in microseconds.
-float z_layer_height = 0.5;              // Layer height in mm.
-int lead_screw_rotations_per_cm = 2;     // Number of rotations needed for the lead screw to move 1 cm.
-int steps_per_rotation_for_motor = 200;  // Steps that the motor needs for a full rotation.
-int distance_to_center = 8;              // Distance from the sensor to the center of the object
+int scan_amount = 100;                    // Number of readings to average for distance measurement
+String file_path = "/scan_001.txt";       // Path to save the file
+int z_axis_height = 6;                    // Maximum height of the scanned file in cm.
+int step_delay = 3000;                    // Delay for each step of the stepper motor in microseconds.
+float z_layer_height = 0.5;               // Layer height in mm.
+int lead_screw_rotations_per_cm = 3;      // Number of rotations needed for the lead screw to move 1 cm.
+int steps_per_rotation_for_motor = 200;   // Steps that the motor needs for a full rotation.
+int distance_to_center = 8;               // Distance from the sensor to the center of the object
 
 // Pin Definitions
 int button = 14;
@@ -36,6 +36,12 @@ float analog = 0.0;
 float RADIANS = 0.0;
 int steps_z_height = 0;
 bool homed = false;
+
+float Q = 0.01;  // Process noise covariance
+float R = 0.1;   // Measurement noise covariance
+float P = 1;     // Estimate error covariance
+float K = 0;     // Kalman gain
+float X = 0;     // Value
 
 void setup() {
   Serial.begin(115200);
@@ -113,20 +119,26 @@ void loop() {
 
 // Function that gets the distance from sensor
 void getDistance() {
-  for (int aa = 0; aa < scan_amount; aa++) {
+  for (int i = 0; i < scan_amount; i++) {
     measured_analog = analogRead(sensor_pin);
     delay(2);
     analog += measured_analog;
   }
-  distance = analog / scan_amount; // Get the mean
+  analog /= scan_amount; // Get the mean
+  float measurement = analog;
   analog = 0; // Reset analog read total value
-  measured_analog = 0; // Reset analog read value
-  distance = mapFloat(distance, 0.0, 1023.0, 0.0, 3.3); // Convert analog pin reading to voltage
+
+  // Apply Kalman filter
+  P = P + Q;
+  K = P / (P + R);
+  X = X + K * (measurement - X);
+  P = (1 - K) * P;
+
+  distance = mapFloat(X, 0.0, 1023.0, 0.0, 3.3); // Convert analog pin reading to voltage
   distance = -5.40274 * pow(distance, 3) + 28.4823 * pow(distance, 2) - 49.7115 * distance + 31.3444; // From datasheet
   distance = distance_to_center - distance; // The distance d = distance from sensor to center - measured distance
   y = cos(angle) * distance;
   x = sin(angle) * distance;
-
 }
 
 // Function to send coordinates to serial
